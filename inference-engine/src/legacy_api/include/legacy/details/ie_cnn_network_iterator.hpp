@@ -34,19 +34,22 @@ CNNNetworkIterator {
     std::unordered_set<CNNLayer*> visited;
     std::list<CNNLayerPtr> nextLayersTovisit;
     InferenceEngine::CNNLayerPtr currentLayer;
-    ICNNNetwork* network = nullptr;
+    const ICNNNetwork* network = nullptr;
 
     void init(const ICNNNetwork* network) {
         if (network == nullptr) THROW_IE_EXCEPTION << "ICNNNetwork object is nullptr";
         // IE_ASSERT(dynamic_cast<const details::CNNNetworkImpl*>(network) != nullptr);
+        this->network = network; // Bani
         InputsDataMap inputs;
         network->getInputsInfo(inputs);
-        if (!inputs.empty()) {
-            auto& nextLayers = getInputTo(inputs.begin()->second->getInputData());
+        // Bani: scan for at least one input which does have a NEXT
+        for(auto& ip : inputs) {
+            auto& nextLayers = getInputTo(ip.second->getInputData());
             if (!nextLayers.empty()) {
                 currentLayer = nextLayers.begin()->second;
                 nextLayersTovisit.push_back(currentLayer);
                 visited.insert(currentLayer.get());
+                break;
             }
         }
     }
@@ -77,6 +80,10 @@ public:
     explicit CNNNetworkIterator(const CNNNetwork & network) {
         const auto & inetwork = static_cast<const InferenceEngine::ICNNNetwork&>(network);
         init(&inetwork);
+    }
+
+    const CNNLayerPtr& getCurrentLayer() {
+        return currentLayer;
     }
 
     /**
@@ -130,7 +137,16 @@ public:
      * @return true if the given iterator is equal to this one, false - otherwise
      */
     bool operator==(const CNNNetworkIterator& that) const {
-        return network == that.network && currentLayer == that.currentLayer;
+        //return network == that.network && currentLayer == that.currentLayer;
+        bool retVal;
+        if(currentLayer == nullptr && that.currentLayer == nullptr) {
+            retVal = true;
+        } else {
+            retVal = network == that.network && currentLayer == that.currentLayer;
+        }
+        //BANI_DBG: std::cout << "     operator== called, retVal=" << retVal << ", this=" << this << ", this.currentLayer = " << ((currentLayer)?(currentLayer->name):("NULL")) << 
+        //BANI_DBG:     ", that=" << &that << ", that.currentLayer = " << ((that.currentLayer)?(that.currentLayer->name):("NULL")) <<"\n";
+        return retVal;
     }
 
 private:
@@ -161,6 +177,31 @@ private:
             if (parentLayer && visited.find(parentLayer.get()) == visited.end()) {
                 nextLayersTovisit.push_back(parentLayer);
                 visited.insert(parentLayer.get());
+            }
+        }
+
+        // Bani
+        // check possibly for other disjoint univisited input subtree
+        if(nextLayersTovisit.empty()) {
+            //BANI_DBG: std::cout << "     CNNNetworkIterator(ICNNNetwork*) next(), checking more input subtree\n";
+            InputsDataMap inputs;
+            network->getInputsInfo(inputs);
+            if (!inputs.empty()) {
+                for(auto itr=inputs.begin(); itr!=inputs.end(); ++itr) { // Bani
+                    //BANI_DBG: std::cout << "    trying input = " << itr->first << "\n";
+                    auto& nextLayers = getInputTo(itr->second->getInputData());
+                    if (nextLayers.empty()) {
+                        continue;
+                    }
+                    currentLayer = nextLayers.begin()->second;
+                    if (visited.find(currentLayer.get()) == visited.end()) {
+                        //BANI_DBG: std::cout << "    unvisited, exploring input = " << itr->first << "\n";
+                        //BANI_DBG: std::cout << "    currentLayer = " << currentLayer->name <<"\n";
+                        nextLayersTovisit.push_back(currentLayer);
+                        visited.insert(currentLayer.get());
+                        break;
+                    }
+                }
             }
         }
 
