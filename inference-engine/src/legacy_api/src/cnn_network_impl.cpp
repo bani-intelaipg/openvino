@@ -357,7 +357,7 @@ size_t CNNNetworkImpl::getBatchSize() const noexcept {
         return 1;
     }
     if (dims.size() == 0) {
-        return 0;
+        return 1;
     }
     return dims.at(0);
 }

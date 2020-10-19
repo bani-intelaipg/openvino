@@ -167,7 +167,8 @@ details::CNNNetworkImplPtr cloneNet(const ICNNNetwork& origin_network) {
 
     std::vector<CNNLayerPtr> layers;
     details::CNNNetworkIterator i(&network);
-    while (i != details::CNNNetworkIterator()) {
+    // while (i != details::CNNNetworkIterator()) {
+    while(i.getCurrentLayer() != nullptr) {
         layers.push_back(*i);
         i++;
     }
